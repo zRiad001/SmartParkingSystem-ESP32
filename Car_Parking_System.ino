@@ -1,33 +1,33 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
-#include <ESP32Servo.h> 
+#include <ESP32Servo.h>
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
 
-const char* ssid = "S23"; 
-const char* password = "abcd0000"; 
+const char* ssid = "S23";
+const char* password = "abcd0000";
 
-const int IR_SPOT_PINS[] = {15, 13, 18, 19, 12}; 
+const int IR_SPOT_PINS[] = {15, 13, 18, 19, 12};
 const int NUM_PARKING_SPOTS = 5;
-const int IR_ENTRY_PIN = 4; 
-const int IR_EXIT_PIN = 32; 
-const int SDA_PIN = 21; 
-const int SCL_PIN = 22; 
+const int IR_ENTRY_PIN = 4;
+const int IR_EXIT_PIN = 32;
+const int SDA_PIN = 21;
+const int SCL_PIN = 22;
 const int SERVO_ENTRY_PIN = 2;
-const int SERVO_EXIT_PIN = 33; 
+const int SERVO_EXIT_PIN = 33;
 
-const int LCD_ADDRESS = 0x27; 
+const int LCD_ADDRESS = 0x27;
 const int LCD_COLS = 16;
 const int LCD_ROWS = 2;
 
-const int SERVO_CLOSED_ANGLE = 0; 
-const int SERVO_OPEN_ANGLE = 90; 
+const int SERVO_CLOSED_ANGLE = 0;
+const int SERVO_OPEN_ANGLE = 90;
 
 LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLS, LCD_ROWS);
-Servo entryServo; 
-Servo exitServo;  
+Servo entryServo;
+Servo exitServo;
 AsyncWebServer server(80);
 
 int irSpotStates[NUM_PARKING_SPOTS];
@@ -40,23 +40,20 @@ int freeSpotsCount = 0;
 const int SENSOR_OCCUPIED_STATE = LOW;
 const int SENSOR_FREE_STATE = HIGH;
 
-int reservedSpotIndex = -1; 
+int reservedSpotIndex = -1;
 unsigned long reservationStartTime = 0;
-const unsigned long RESERVATION_TIMEOUT_MS = 5 * 60 * 1000; 
+const unsigned long RESERVATION_TIMEOUT_MS = 5 * 60 * 1000;
 
-String logBuffer = ""; 
-const int MAX_LOG_LENGTH = 500; 
+String logBuffer = "";
+const int MAX_LOG_LENGTH = 500;
 
 String webRequestLcdMessage = "";
-unsigned long webRequestLcdMessageTimeout = 0; 
-const unsigned long WEB_REQUEST_LCD_DURATION = 2000; 
+unsigned long webRequestLcdMessageTimeout = 0;
+const unsigned long WEB_REQUEST_LCD_DURATION = 2000;
 
-String sensorLcdMessage = ""; 
-unsigned long sensorLcdMessageTimeout = 0; 
+String sensorLcdMessage = "";
+unsigned long sensorLcdMessageTimeout = 0;
 const unsigned long SENSOR_MESSAGE_DURATION = 3000;
-IPAddress local_IP(192, 168, 212, 230);
-IPAddress gateway(192, 168, 212, 1);
-IPAddress subnet(255, 255, 255, 0);
 
 String getTimestamp() {
   unsigned long currentMillis = millis();
@@ -100,15 +97,10 @@ void setSensorLcdMessage(String message) {
   sensorLcdMessageTimeout = millis() + SENSOR_MESSAGE_DURATION;
 }
 
-
 void setup() {
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
   Serial.begin(115200);
   logEvent("ESP32 Smart Parking System Starting...");
-
-  if (!WiFi.config(local_IP, gateway, subnet)) {
-    Serial.println("Statik IP təyin etmək alınmadı!");
-  }
 
   WiFi.begin(ssid, password);
   int connectAttempts = 0;
@@ -154,7 +146,6 @@ void setup() {
   exitServo.write(SERVO_CLOSED_ANGLE);
   delay(1000);
 
-  
   server.on("/get", HTTP_GET, [](AsyncWebServerRequest *request) {
     setWebRequestLcdMessage(request->url());
     String status = "{";
@@ -165,13 +156,9 @@ void setup() {
     for (int i = 0; i < NUM_PARKING_SPOTS; i++) {
       int spotStatus;
       if (irSpotStates[i] == SENSOR_OCCUPIED_STATE) {
-        spotStatus = 0; 
+        spotStatus = 0;
       } else {
-        if (i == reservedSpotIndex) {
-          spotStatus = 1; 
-        } else {
-          spotStatus = 2; 
-        }
+        spotStatus = (i == reservedSpotIndex) ? 1 : 2;
       }
       status += String(spotStatus);
       if (i < NUM_PARKING_SPOTS - 1) status += ",";
@@ -179,7 +166,6 @@ void setup() {
     status += "],";
     status += "\"barrierEntrySensor\": " + String(irEntryState == SENSOR_OCCUPIED_STATE ? "true" : "false") + ",";
     status += "\"barrierExitSensor\": " + String(irExitState == SENSOR_OCCUPIED_STATE ? "true" : "false") + ",";
-
     status += "\"barrierEntryOpen\": " + String(entryServo.read() == SERVO_OPEN_ANGLE ? 1 : 0) + ",";
     status += "\"barrierExitOpen\": " + String(exitServo.read() == SERVO_OPEN_ANGLE ? 1 : 0) + ",";
 
@@ -238,7 +224,6 @@ void setup() {
     request->send(200, "text/plain", "Reservation cancelled.");
   });
 
-  
   server.on("/open_entry", HTTP_GET, [](AsyncWebServerRequest *request) {
     setWebRequestLcdMessage(request->url());
     entryServo.write(SERVO_OPEN_ANGLE);
@@ -272,14 +257,12 @@ void setup() {
 }
 
 void loop() {
-  
   for (int i = 0; i < NUM_PARKING_SPOTS; i++) {
     irSpotStates[i] = digitalRead(IR_SPOT_PINS[i]);
     if (irSpotStates[i] != prevIrSpotStates[i]) {
       String status = (irSpotStates[i] == SENSOR_OCCUPIED_STATE) ? "occupied" : "free";
       logEvent("Spot " + String(i + 1) + " " + status);
       prevIrSpotStates[i] = irSpotStates[i];
-      
       if (i == reservedSpotIndex && irSpotStates[i] == SENSOR_OCCUPIED_STATE) {
          logEvent("Reserved spot " + String(reservedSpotIndex + 1) + " occupied. Reservation cancelled.");
          reservedSpotIndex = -1;
@@ -287,41 +270,34 @@ void loop() {
     }
   }
 
-  
   irEntryState = digitalRead(IR_ENTRY_PIN);
   if (irEntryState != prevIrEntryState) {
     if (irEntryState == SENSOR_OCCUPIED_STATE) {
       logEvent("Car detected at entry");
       setSensorLcdMessage("Welcome");
-
-     
       entryServo.write(SERVO_OPEN_ANGLE);
       logEvent("Entry barrier opened by sensor");
-    } else { 
+    } else {
       entryServo.write(SERVO_CLOSED_ANGLE);
       logEvent("Entry barrier closed by sensor");
     }
     prevIrEntryState = irEntryState;
   }
 
- 
   irExitState = digitalRead(IR_EXIT_PIN);
   if (irExitState != prevIrExitState) {
     if (irExitState == SENSOR_OCCUPIED_STATE) {
       logEvent("Car detected at exit");
       setSensorLcdMessage("See you soon");
-
       exitServo.write(SERVO_OPEN_ANGLE);
       logEvent("Exit barrier opened by sensor");
-    } else { 
+    } else {
       exitServo.write(SERVO_CLOSED_ANGLE);
       logEvent("Exit barrier closed by sensor");
     }
     prevIrExitState = irExitState;
   }
 
-
-  
   freeSpotsCount = 0;
   for (int i = 0; i < NUM_PARKING_SPOTS; i++) {
     if (irSpotStates[i] == SENSOR_FREE_STATE) {
@@ -329,7 +305,6 @@ void loop() {
     }
   }
 
- 
   if (reservedSpotIndex != -1) {
     if (millis() - reservationStartTime > RESERVATION_TIMEOUT_MS) {
       logEvent("Reservation timeout for spot " + String(reservedSpotIndex + 1));
@@ -337,7 +312,6 @@ void loop() {
     }
   }
 
- 
   lcd.clear();
   if (webRequestLcdMessage != "" && millis() < webRequestLcdMessageTimeout) {
     lcd.setCursor(0, 0);
@@ -349,8 +323,7 @@ void loop() {
     lcd.print("ESP32 SmartPark");
     lcd.setCursor(0, 1);
     lcd.print(sensorLcdMessage);
-  }
-  else {
+  } else {
     lcd.setCursor(0, 0);
     lcd.print("Free: ");
     lcd.print(freeSpotsCount);
